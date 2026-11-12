@@ -1,6 +1,6 @@
 # LLM EVALUATION METRICS - V1
 
-- Generated: 2026-11-13 03:04
+- Generated: 2026-11-13
 - Protocol: batched API calls; only the claim text was sent
 
 ## deepseek-ai/DeepSeek-V4.1-Flash (River)
