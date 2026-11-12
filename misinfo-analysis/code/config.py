@@ -1,33 +1,58 @@
-"""Central configuration for the LLM evaluation (POC v1).
+"""Configuration for the claim-labeling pipeline."""
 
-Everything you normally want to change lives here (model, paths, run size).
-API keys are NEVER hard-coded: they are read from the environment by
-llm_client.LLMClient (see PROVIDERS there for provider -> env var mapping).
-"""
-
+import os
+import re
 from pathlib import Path
 
-# --- paths -----------------------------------------------------------------
-EVAL_DIR = Path(__file__).resolve().parent            # .../misinfo-analysis/code
-PROJECT_ROOT = EVAL_DIR.parent                        # .../misinfo-analysis
-INPUT_SCHEMA = PROJECT_ROOT / "datasets" / "finfact_training_schema.json"
+EVAL_DIR = Path(__file__).resolve().parent
+INPUT_SCHEMA = EVAL_DIR.parent / "datasets" / "finfact_training_schema.json"
 RESULTS_DIR = EVAL_DIR / "results"
-PREDICTIONS_CSV = RESULTS_DIR / "llm_predictions_v1.csv"
-SELECTION_JSON = RESULTS_DIR / "selected_records_v1.json"
 METRICS_MD = EVAL_DIR / "metrics_v1.md"
 
-# --- model -----------------------------------------------------------------
-# Unified interface: to switch models later, change only PROVIDER and MODEL
-# (plus the matching API key env var). See llm_client.PROVIDERS.
-PROVIDER = "river"                                # river | deepseek | openai | openrouter
-MODEL = "deepseek-ai/DeepSeek-V4.1-Flash"         # River-served DeepSeek (see docs)
 
-# --- run settings ----------------------------------------------------------
-N_CALLS = None                  # None = label ALL records; set an int to cap
-BATCH_SIZE = 300                # claims per API call (one call per batch)
-BATCH_PAUSE = 3.0               # seconds of pause between batches
-SEED = 42                       # shuffles records deterministically (resume-safe)
-INCLUDE_NEI = True              # all records are in scope; NEI is a label
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, _, value = line.partition("=")
+            os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+
+
+_load_env_file(EVAL_DIR / ".env")
+
+# Default model for `python run_eval.py`. Providers are defined in
+# llm_client.PROVIDERS: deepseek (River), gemini, merge, groq, groq2, openrouter.
+PROVIDER = "deepseek"
+MODEL = "deepseek-ai/DeepSeek-V4.1-Flash"
+
+N_CALLS = None          # None = label every record
+BATCH_SIZE = 300        # claims per API call
+BATCH_PAUSE = 3.0       # seconds between calls
+SEED = 42
+INCLUDE_NEI = True
 TEMPERATURE = 0.0
-MAX_TOKENS = 16384              # one output line per claim (up to 300 lines)
-CLIENT_TIMEOUT = 300            # seconds per HTTP call (batch answers take longer)
+MAX_TOKENS = 16384
+CLIENT_TIMEOUT = 300    # seconds per HTTP request
+
+# Runs shown in metrics_v1.md: (report label, model name)
+MODEL_RUNS = [
+    ("deepseek-ai/DeepSeek-V4.1-Flash (River)", "deepseek-ai/DeepSeek-V4.1-Flash"),
+    ("gpt-6.1-sol (Merge Gateway)", "gpt-6.1-sol"),
+    ("gemini-3.5-flash-lite (Google)", "gemini-3.5-flash-lite"),
+    ("gpt-oss-120b (Groq)", "openai/gpt-oss-120b"),
+]
+
+# Fixed predictions filenames so re-runs resume instead of starting over.
+_KNOWN_FILES = {
+    "deepseek-ai/DeepSeek-V4.1-Flash": "llm_predictions_deepseek.csv",
+    "gpt-6.1-sol": "llm_predictions_gpt61sol.csv",
+    "gemini-3.5-flash-lite": "llm_predictions_gemini35flashlite.csv",
+    "openai/gpt-oss-120b": "llm_predictions_groq_gptoss120b.csv",
+}
+
+
+def output_for_model(model: str) -> Path:
+    name = _KNOWN_FILES.get(model) or "llm_predictions_" + re.sub(r"[^A-Za-z0-9._-]+", "_", model) + ".csv"
+    return RESULTS_DIR / name

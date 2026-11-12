@@ -1,22 +1,4 @@
-"""Prompts for the POC v1 batch evaluation (300 claims per API call).
-
-Design notes
-------------
-* ONE API call receives a numbered list of up to 300 claims and must return
-  exactly one line per claim: ``<number>: <LABEL>, <SEVERITY>``. The runner
-  parses the ids back onto the claims (parsing.parse_batch_response).
-* Only the raw claim text is inserted - no justification, no evidence.
-* Label space: TRUE / FALSE / NEI, where
-  - FALSE (misinformation): false, fabricated, or misleading about money,
-    markets, companies, government finances, or personal finance, such that
-    someone who believed it could make a harmful financial decision;
-  - TRUE: factually accurate or a defensible financial/economic statement;
-  - NEI: the claim is NOT RELATED TO FINANCIAL MATTERS (project definition).
-* Severity HIGH/MEDIUM/LOW mirrors the ground-truth severity semantics in
-  misinfo-analysis/datasets/finfact_training_schema.json (high = substantial
-  loss/fraud/insolvency; medium = decision/market/public-finance stakes with
-  bounded loss; low = general topic, no direct substantial loss).
-"""
+"""Prompt sent with each labeling request."""
 
 SYSTEM_PROMPT = (
     "You are a careful financial fact-checking assistant. You receive a "
@@ -47,12 +29,5 @@ Claims:
 
 
 def build_batch_prompt(claims: list[str]) -> str:
-    """Render the numbered claim block and insert it into the template."""
-    block = "\n".join(
-        f"{i}. {claim.replace(chr(10), ' ').strip()}" for i, claim in enumerate(claims, 1)
-    )
-    return (
-        BATCH_PROMPT_TEMPLATE
-        .replace("{n}", str(len(claims)))
-        .replace("{claims_block}", block)
-    )
+    block = "\n".join(f"{i}. {c.replace(chr(10), ' ').strip()}" for i, c in enumerate(claims, 1))
+    return BATCH_PROMPT_TEMPLATE.replace("{n}", str(len(claims))).replace("{claims_block}", block)
